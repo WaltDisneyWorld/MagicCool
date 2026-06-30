@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "MagicCool",
+    "slug": "magiccool",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "magiccool",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1026"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "site.rserv.magiccool",
+      "infoPlist": {
+        "NFCReaderUsageDescription": "MagicCool uses NFC to read and write park tickets and fast passes."
+      }
+    },
+    "android": {
+      "package": "site.rserv.magiccool",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1026"
+      },
+      "permissions": [
+        "android.permission.NFC"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-nfc-manager",
+        {
+          "nfcPermission": "MagicCool uses NFC to read and write park tickets and fast passes.",
+          "selectIdentifiers": [
+            "D2760000850101"
+          ]
+        }
+      ],
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
