@@ -15,10 +15,25 @@ panel.
 
 ### NFC ticketing
 - **Write** a ticket onto a blank NFC tag and capture its UID in one tap.
+- **Signed payloads** — tags carry `MC1.<ticketId>.<sig>` (SHA-256 via
+  `expo-crypto`), so the gate can flag blank or cloned tags. Optionally
+  enforce signatures park-wide from settings.
 - **Gate entry scanner** reads a tag, looks up the linked ticket and validates
-  date range, status and remaining entries before consuming one entry.
+  date range, status, remaining entries — and, when enabled, the tag
+  signature and an **anti-passback** re-entry cooldown — before consuming an
+  entry.
 - Tag UID ↔ ticket binding, so a lost tag can be re-issued without losing the
   guest record.
+
+### NFC toolkit (admin → NFC tab)
+- **Inspect** — deep-read any tag: UID, tech types, capacity, writability,
+  NDEF records, signature verification and linked-guest lookup (falls back to
+  the signed payload when the UID isn't in the local database).
+- **Write** — put arbitrary NDEF text/URLs on tags (maps, promos, souvenirs).
+- **Erase** — clear a tag's NDEF payload.
+- **Lock** — permanently make a tag read-only (with confirmation).
+- **Gate security settings** — toggle signed-tag enforcement and set the
+  anti-passback cooldown.
 
 ### Fast pass management
 - Book hourly **return windows** per attraction with per-window capacity limits.
@@ -78,6 +93,7 @@ app/                     # expo-router routes (file-based)
     tickets.tsx          #   ticket list + search
     fastpass.tsx         #   fast pass overview
     attractions.tsx      #   ride management
+    nfc.tsx              #   NFC toolkit (inspect/write/erase/lock) + security settings
     logs.tsx             #   scan audit log
   ticket/
     new.tsx              # issue + provision a ticket
@@ -90,6 +106,7 @@ src/
     format.ts            #   display helpers
   services/
     nfc.ts               # react-native-nfc-manager wrapper + simulator
+    signing.ts           # signed tag payloads (SHA-256)
     id.ts                # id / fake-UID helpers
   store/
     appStore.ts          # zustand store, persisted to AsyncStorage
@@ -116,4 +133,6 @@ src/
   single integration point).
 - Point the store at a shared backend so gates, redeem stations and the admin
   panel see the same data in real time.
-- Sign/HMAC the payload written to tags to prevent cloning.
+- Move the tag-signing secret server-side (`src/services/signing.ts` documents
+  this) — sign at provisioning, verify at the gate via API — or use tags with
+  on-chip crypto (e.g. NTAG 424 DNA) instead of NDEF text payloads.

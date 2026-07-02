@@ -13,6 +13,7 @@ import {
 import { deriveStatus, evaluateEntry, DEFAULT_MAX_ENTRIES } from '@/domain/tickets';
 import { evaluateRedeem, meetsTierRequirement, bookingsInWindow } from '@/domain/fastpass';
 import { makeId } from '@/services/id';
+import { SignatureStatus, classifyPayload } from '@/services/signing';
 import {
   SEED_ATTRACTIONS,
   SEED_FASTPASSES,
@@ -25,7 +26,21 @@ export interface ScanOutcome {
   reason: string;
   ticket?: Ticket;
   fastPass?: FastPass;
+  /** Gate-entry only: whether the tag carried a valid signed payload. */
+  signature?: SignatureStatus;
 }
+
+export interface ParkSettings {
+  /** Deny signed-payload-less tags at the gate when true. */
+  requireSignedTags: boolean;
+  /** Minutes before the same ticket may re-enter; 0 disables anti-passback. */
+  antiPassbackMinutes: number;
+}
+
+const DEFAULT_SETTINGS: ParkSettings = {
+  requireSignedTags: false,
+  antiPassbackMinutes: 0,
+};
 
 export interface NewTicketInput {
   guestName: string;
@@ -42,6 +57,7 @@ interface AppState {
   attractions: Attraction[];
   scanLogs: ScanLog[];
   isAdminAuthed: boolean;
+  settings: ParkSettings;
 
   // ---- auth ----
   login: (pin: string) => boolean;
@@ -74,10 +90,11 @@ interface AppState {
   cancelFastPass: (id: string) => void;
 
   // ---- scanning (the NFC-driven flows) ----
-  recordGateEntry: (nfcId: string, location: string) => ScanOutcome;
+  recordGateEntry: (nfcId: string, location: string, tagText?: string | null) => Promise<ScanOutcome>;
   redeemFastPassByNfc: (nfcId: string, attractionId: string, location: string) => ScanOutcome;
 
-  // ---- maintenance ----
+  // ---- settings & maintenance ----
+  updateSettings: (patch: Partial<ParkSettings>) => void;
   resetToSeed: () => void;
 }
 
@@ -93,6 +110,7 @@ export const useAppStore = create<AppState>()(
       attractions: SEED_ATTRACTIONS,
       scanLogs: SEED_LOGS,
       isAdminAuthed: false,
+      settings: DEFAULT_SETTINGS,
 
       login: (pin) => {
         const ok = pin === '1955'; // park opening year — change in production
@@ -214,14 +232,51 @@ export const useAppStore = create<AppState>()(
           ),
         })),
 
-      recordGateEntry: (nfcId, location) => {
+      recordGateEntry: async (nfcId, location, tagText) => {
         const state = get();
         const ticket = state.ticketByNfc(nfcId);
-        const evalResult = evaluateEntry(ticket);
+        const settings = state.settings;
+
+        const signature: SignatureStatus = ticket
+          ? await classifyPayload(tagText ?? null, ticket.id)
+          : 'missing';
+
+        let evalResult = evaluateEntry(ticket);
+
+        if (evalResult.ok && ticket && settings.requireSignedTags && signature !== 'valid') {
+          evalResult = {
+            ok: false,
+            reason:
+              signature === 'invalid'
+                ? 'Tag signature invalid — possible cloned tag'
+                : 'Tag has no signed payload — re-provision required',
+          };
+        }
+
+        if (evalResult.ok && ticket && settings.antiPassbackMinutes > 0) {
+          // scanLogs are newest-first, so `find` returns the latest entry.
+          const last = state.scanLogs.find(
+            (l) => l.type === 'gate-entry' && l.result === 'granted' && l.ticketId === ticket.id,
+          );
+          if (last) {
+            const elapsedMs = Date.now() - new Date(last.timestamp).getTime();
+            if (elapsedMs < settings.antiPassbackMinutes * 60_000) {
+              const waitMin = Math.ceil(
+                (settings.antiPassbackMinutes * 60_000 - elapsedMs) / 60_000,
+              );
+              evalResult = {
+                ok: false,
+                reason: `Anti-passback: re-entry allowed in ${waitMin} min`,
+              };
+            }
+          }
+        }
+
         const outcome: ScanOutcome = {
           result: evalResult.ok ? 'granted' : 'denied',
           reason: evalResult.reason,
           ticket,
+          signature,
         };
 
         set((s) => {
@@ -296,12 +351,15 @@ export const useAppStore = create<AppState>()(
         return outcome;
       },
 
+      updateSettings: (patch) => set((s) => ({ settings: { ...s.settings, ...patch } })),
+
       resetToSeed: () =>
         set({
           tickets: SEED_TICKETS,
           fastPasses: SEED_FASTPASSES,
           attractions: SEED_ATTRACTIONS,
           scanLogs: SEED_LOGS,
+          settings: DEFAULT_SETTINGS,
           isAdminAuthed: get().isAdminAuthed,
         }),
     }),
@@ -313,6 +371,7 @@ export const useAppStore = create<AppState>()(
         fastPasses: s.fastPasses,
         attractions: s.attractions,
         scanLogs: s.scanLogs,
+        settings: s.settings,
       }),
     },
   ),

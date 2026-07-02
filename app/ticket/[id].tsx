@@ -21,6 +21,7 @@ import { suggestWindow } from '@/domain/fastpass';
 import { fastPassTone, shortDate, ticketTone, windowLabel } from '@/domain/format';
 import { TicketType } from '@/domain/types';
 import { writeTag } from '@/services/nfc';
+import { buildTagPayload } from '@/services/signing';
 import { colors, radius, space } from '@/theme/colors';
 
 const TYPE_OPTIONS: { label: string; value: TicketType }[] = [
@@ -77,7 +78,7 @@ export default function TicketDetail() {
   async function provisionTag() {
     setLinking(true);
     try {
-      const payload = await writeTag(tk.id);
+      const payload = await writeTag(await buildTagPayload(tk.id));
       store.linkNfc(tk.id, payload.uid);
       Alert.alert(
         payload.simulated ? 'Tag linked (simulated)' : 'Tag written',

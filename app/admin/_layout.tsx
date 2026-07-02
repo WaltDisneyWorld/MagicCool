@@ -52,6 +52,13 @@ export default function AdminLayout() {
         }}
       />
       <Tabs.Screen
+        name="nfc"
+        options={{
+          title: 'NFC',
+          tabBarIcon: ({ color, size }) => <Ionicons name="radio-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="logs"
         options={{
           title: 'Logs',

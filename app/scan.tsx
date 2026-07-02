@@ -15,9 +15,9 @@ export default function GateScanScreen() {
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [simulated, setSimulated] = useState(false);
 
-  function handleScan(payload: TagPayload) {
+  async function handleScan(payload: TagPayload) {
     setSimulated(payload.simulated);
-    setOutcome(recordGateEntry(payload.uid, GATE));
+    setOutcome(await recordGateEntry(payload.uid, GATE, payload.text));
   }
 
   const granted = outcome?.result === 'granted';
@@ -54,9 +54,27 @@ export default function GateScanScreen() {
               <KeyValue k="Entries left" v={entriesRemainingLabel(outcome.ticket)} />
             </View>
           )}
-          {simulated && (
-            <Badge label="Simulated tap" tone="warning" />
-          )}
+          <View style={{ flexDirection: 'row', gap: space.sm }}>
+            {outcome.signature && (
+              <Badge
+                label={
+                  outcome.signature === 'valid'
+                    ? 'Signed tag ✓'
+                    : outcome.signature === 'invalid'
+                      ? 'Bad signature'
+                      : 'Unsigned tag'
+                }
+                tone={
+                  outcome.signature === 'valid'
+                    ? 'success'
+                    : outcome.signature === 'invalid'
+                      ? 'danger'
+                      : 'muted'
+                }
+              />
+            )}
+            {simulated && <Badge label="Simulated tap" tone="warning" />}
+          </View>
         </Card>
       )}
 

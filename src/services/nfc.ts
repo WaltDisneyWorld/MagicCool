@@ -109,6 +109,84 @@ export async function writeTag(text: string): Promise<TagPayload> {
   }
 }
 
+export interface TagDetails extends TagPayload {
+  /** Native tech types reported by the tag (e.g. NfcA, Ndef, MifareUltralight). */
+  techTypes: string[];
+  /** NDEF capacity in bytes, when the platform reports it. */
+  maxSize: number | null;
+  /** Whether the tag is currently writable, when the platform reports it. */
+  isWritable: boolean | null;
+  /** Number of NDEF records on the tag. */
+  recordCount: number;
+}
+
+/** Deep-reads a tag: UID, tech list, capacity, writability and NDEF text. */
+export async function readTagDetails(): Promise<TagDetails> {
+  const m = await loadNative();
+  const supported = await isNfcSupported();
+  if (!m || !supported) {
+    return {
+      uid: makeFakeNfcUid(),
+      text: null,
+      simulated: true,
+      techTypes: ['NfcA (simulated)', 'Ndef (simulated)'],
+      maxSize: 540,
+      isWritable: true,
+      recordCount: 0,
+    };
+  }
+  try {
+    await m.default.requestTechnology(m.NfcTech.Ndef);
+    const tag = await m.default.getTag();
+    return {
+      uid: (tag?.id ?? '').toString().toUpperCase() || makeFakeNfcUid(),
+      text: decodeNdefText(m, tag),
+      simulated: false,
+      techTypes: (tag as any)?.techTypes ?? [],
+      maxSize: (tag as any)?.maxSize ?? null,
+      isWritable: (tag as any)?.isWritable ?? null,
+      recordCount: tag?.ndefMessage?.length ?? 0,
+    };
+  } finally {
+    try {
+      await m.default.cancelTechnologyRequest();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Clears a tag by overwriting its NDEF message with a single empty record. */
+export async function eraseTag(): Promise<TagPayload> {
+  return writeTag('');
+}
+
+/**
+ * Permanently locks a tag against further writes (irreversible on hardware).
+ * Returns the tag UID. In simulation mode this is a no-op that returns a
+ * fake UID.
+ */
+export async function lockTag(): Promise<TagPayload> {
+  const m = await loadNative();
+  const supported = await isNfcSupported();
+  if (!m || !supported) {
+    return { uid: makeFakeNfcUid(), text: null, simulated: true };
+  }
+  try {
+    await m.default.requestTechnology(m.NfcTech.Ndef);
+    const tag = await m.default.getTag();
+    await m.default.ndefHandler.makeReadOnly();
+    const uid = (tag?.id ?? '').toString().toUpperCase() || makeFakeNfcUid();
+    return { uid, text: decodeNdefText(m, tag), simulated: false };
+  } finally {
+    try {
+      await m.default.cancelTechnologyRequest();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export async function cancel(): Promise<void> {
   const m = await loadNative();
   if (!m) return;

@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/appStore';
 import { DEFAULT_MAX_ENTRIES, TICKET_TYPE_LABELS } from '@/domain/tickets';
 import { TicketType } from '@/domain/types';
 import { writeTag } from '@/services/nfc';
+import { buildTagPayload } from '@/services/signing';
 import { colors, space } from '@/theme/colors';
 
 const TYPE_OPTIONS: { label: string; value: TicketType }[] = [
@@ -49,7 +50,7 @@ export default function NewTicket() {
       });
 
       if (linkTag) {
-        const payload = await writeTag(ticket.id);
+        const payload = await writeTag(await buildTagPayload(ticket.id));
         linkNfc(ticket.id, payload.uid);
       }
       router.replace({ pathname: '/ticket/[id]', params: { id: ticket.id } });
